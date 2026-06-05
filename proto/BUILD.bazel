@@ -1,0 +1,36 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@com_github_grpc_grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
+load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@rules_go//proto:def.bzl", "go_proto_library")
+
+# Base proto library
+proto_library(
+    name = "inference_proto",
+    srcs = ["inference.proto"],
+    visibility = ["//visibility:public"],
+)
+
+# C++ proto library
+cc_proto_library(
+    name = "inference_cc_proto",
+    visibility = ["//visibility:public"],
+    deps = [":inference_proto"],
+)
+
+# C++ gRPC library
+cc_grpc_library(
+    name = "inference_cc_grpc",
+    srcs = [":inference_proto"],
+    grpc_only = True,
+    visibility = ["//visibility:public"],
+    deps = [":inference_cc_proto"],
+)
+
+# Go proto library
+go_proto_library(
+    name = "inference_go_proto",
+    compilers = ["@rules_go//proto:go_grpc"],
+    importpath = "github.com/AbhinavSingh95/laminar-inference/proto",
+    proto = ":inference_proto",
+    visibility = ["//visibility:public"],
+)

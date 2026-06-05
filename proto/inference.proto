@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package inference;
+
+option go_package = "github.com/AbhinavSingh95/laminar-inference/proto;inference";
+
+// InferenceService handles batch processing of inference requests
+service InferenceService {
+  // ProcessBatch receives a batch of requests and returns corresponding results
+  rpc ProcessBatch(BatchRequest) returns (BatchResponse) {}
+}
+
+// RequestItem represents a single inference request
+message RequestItem {
+  // Unique identifier for this request
+  string id = 1;
+  
+  // The input prompt/data to process
+  string prompt = 2;
+
+  // Request correlation identifier propagated from the HTTP gateway
+  string trace_id = 3;
+}
+
+// ResponseItem represents the result for a single request
+message ResponseItem {
+  // Unique identifier matching the request
+  string id = 1;
+  
+  // The inference result
+  string result = 2;
+
+  // Correlation identifier copied from the request
+  string trace_id = 3;
+}
+
+// BatchRequest contains multiple requests to be processed together
+message BatchRequest {
+  // List of individual requests in this batch
+  repeated RequestItem requests = 1;
+}
+
+// BatchResponse contains results for all requests in the batch
+message BatchResponse {
+  // List of individual responses matching the requests
+  repeated ResponseItem responses = 1;
+}

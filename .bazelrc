@@ -1,0 +1,32 @@
+# High-Throughput Inference Engine - Bazel Configuration
+# Optimizes build performance and output formatting
+
+# Build output configuration
+build --show_result=10
+build --show_progress_rate_limit=0.25
+
+# C++ compilation flags
+build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
+build --cxxopt=-Wno-error=missing-template-arg-list-after-template-kw
+
+# Disable problematic features on macOS
+build --features=-layering_check
+
+# Performance optimizations
+build --jobs=auto
+build --local_resources=cpu=HOST_CPUS-1
+
+# Output control
+build --verbose_failures
+build --incompatible_strict_action_env
+
+# Test output
+test --test_output=errors
+test --test_summary=detailed
+
+# Color output for better readability
+common --color=yes
+
+# Cache settings for faster rebuilds
+build --disk_cache=~/.cache/bazel

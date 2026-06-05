@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "gateway_lib",
+    srcs = [
+        "main.go",
+        "policy.go",
+        "worker_pool.go",
+    ],
+    importpath = "github.com/AbhinavSingh95/laminar-inference/gateway",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//proto:inference_go_proto",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+        "@com_github_prometheus_client_golang//prometheus/promhttp",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_binary(
+    name = "gateway",
+    embed = [":gateway_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "gateway_test",
+    srcs = [
+        "main_test.go",
+        "policy_test.go",
+        "worker_pool_test.go",
+    ],
+    embed = [":gateway_lib"],
+    deps = [
+        "//proto:inference_go_proto",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

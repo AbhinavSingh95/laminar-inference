@@ -1,0 +1,38 @@
+# Bazel build artifacts
+bazel-*
+.bazel-*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# C++
+*.o
+*.a
+*.out
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Python
+__pycache__/
+*.pyc
