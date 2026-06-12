@@ -8,7 +8,7 @@ build --show_progress_rate_limit=0.25
 # C++ compilation flags
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
-build --cxxopt=-Wno-error=missing-template-arg-list-after-template-kw
+build --cxxopt=-Wno-missing-template-arg-list-after-template-kw
 
 # Disable problematic features on macOS
 build --features=-layering_check
