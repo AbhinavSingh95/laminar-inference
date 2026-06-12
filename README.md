@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-111827?style=flat-square"></a>
 </p>
 
-# Laminar Inference
+## About
 
 Laminar Inference is a small inference-serving systems lab. It implements a Go HTTP gateway, a C++ gRPC worker, dynamic/adaptive batching, multi-worker routing, backpressure, token-budget admission control, tracing, metrics, streaming responses, and several model/runtime backends including ONNX Runtime and llama.cpp.
 
