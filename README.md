@@ -266,4 +266,4 @@ Laminar is a focused systems project, not a hardened production inference platfo
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
