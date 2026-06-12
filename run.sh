@@ -89,5 +89,6 @@ done
 
 echo "Starting Go gateway on ${LAMINAR_HTTP_ADDR:-:8080}"
 echo "Worker targets: ${LAMINAR_WORKER_ADDRS}"
+echo "Worker backend: ${LAMINAR_WORKER_BACKEND:-simulator}"
 echo ""
 ./bazel-bin/gateway/gateway_/gateway

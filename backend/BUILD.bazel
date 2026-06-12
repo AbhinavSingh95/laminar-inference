@@ -1,13 +1,49 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
+cc_library(
+    name = "continuous_batcher",
+    srcs = ["scheduling/continuous_batcher.cc"],
+    hdrs = ["scheduling/continuous_batcher.h"],
+    copts = ["-std=c++17"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "inference_backend",
+    srcs = ["inference_backend.cc"],
+    hdrs = ["inference_backend.h"],
+    copts = ["-std=c++17"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":continuous_batcher",
+        "//third_party/onnxruntime:c_api_headers",
+    ],
+)
+
 cc_binary(
     name = "worker",
     srcs = ["main.cc"],
+    copts = ["-std=c++17"],
     visibility = ["//visibility:public"],
     deps = [
+        ":inference_backend",
         "//proto:inference_cc_grpc",
         "//proto:inference_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",
     ],
+)
+
+cc_test(
+    name = "continuous_batcher_test",
+    srcs = ["scheduling/continuous_batcher_test.cc"],
+    copts = ["-std=c++17"],
+    deps = [":continuous_batcher"],
+)
+
+cc_test(
+    name = "inference_backend_test",
+    srcs = ["inference_backend_test.cc"],
+    copts = ["-std=c++17"],
+    deps = [":inference_backend"],
 )

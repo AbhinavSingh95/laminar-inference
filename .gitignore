@@ -33,6 +33,13 @@ go.work
 *.temp
 .cache/
 
+# Local model artifacts; benchmark scripts use Hugging Face or local paths.
+models/local/
+*.gguf
+
+# Optional ONNX Runtime binary installed by scripts/setup_onnxruntime.sh
+third_party/onnxruntime/lib/
+
 # Python
 __pycache__/
 *.pyc

@@ -8,6 +8,9 @@ option go_package = "github.com/AbhinavSingh95/laminar-inference/proto;inference
 service InferenceService {
   // ProcessBatch receives a batch of requests and returns corresponding results
   rpc ProcessBatch(BatchRequest) returns (BatchResponse) {}
+
+  // Stream receives one request and returns token-level streaming events.
+  rpc Stream(RequestItem) returns (stream StreamResponse) {}
 }
 
 // RequestItem represents a single inference request
@@ -32,6 +35,42 @@ message ResponseItem {
 
   // Correlation identifier copied from the request
   string trace_id = 3;
+
+  // Worker backend that produced the result, for trace attribution.
+  string backend_name = 4;
+
+  // Time spent inside the worker backend for this request, in microseconds.
+  int64 backend_latency_micros = 5;
+
+  // Backend-specific inference measurements for traces and benchmark reports.
+  map<string, string> backend_metadata = 6;
+}
+
+// StreamResponse represents one server-streaming inference event.
+message StreamResponse {
+  // Unique identifier matching the request
+  string id = 1;
+
+  // Correlation identifier copied from the request
+  string trace_id = 2;
+
+  // Event type, for example "token" or "done"
+  string event_type = 3;
+
+  // Incremental token/text delta for token events
+  string delta = 4;
+
+  // Final inference result for done events
+  string result = 5;
+
+  // Worker backend that produced the event
+  string backend_name = 6;
+
+  // Time spent inside the worker backend, in microseconds
+  int64 backend_latency_micros = 7;
+
+  // Backend-specific streaming measurements
+  map<string, string> backend_metadata = 8;
 }
 
 // BatchRequest contains multiple requests to be processed together

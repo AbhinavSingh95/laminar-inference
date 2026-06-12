@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="240" viewBox="0 0 980 240" role="img" aria-labelledby="title desc">
+  <title id="title">Laminar Inference</title>
+  <desc id="desc">Wordmark for Laminar Inference, an inference serving systems lab.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="flow-a" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.55" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="flow-b" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <filter id="soft-glow" x="-30%" y="-80%" width="160%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feColorMatrix in="blur" result="glow" type="matrix" values="0 0 0 0 0.13 0 0 0 0 0.83 0 0 0 0 0.93 0 0 0 0.22 0"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="1" y="1" width="978" height="238" rx="18" fill="url(#panel)" stroke="#1f2937" stroke-width="2"/>
+  <path d="M52 190 C142 158 238 226 330 184 S510 150 620 190 S838 220 928 178" fill="none" stroke="#1f2937" stroke-width="2"/>
+  <path d="M42 52 C132 84 238 20 332 56 S504 94 618 54 S828 18 940 72" fill="none" stroke="#1f2937" stroke-width="2"/>
+
+  <g transform="translate(66 58)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 30 C64 6 126 6 190 30 S318 54 382 30" stroke="url(#flow-a)" stroke-width="10" filter="url(#soft-glow)"/>
+    <path d="M0 70 C64 46 126 46 190 70 S318 94 382 70" stroke="#64748b" stroke-width="6"/>
+    <path d="M0 110 C64 86 126 86 190 110 S318 134 382 110" stroke="url(#flow-b)" stroke-width="8"/>
+
+    <g fill="#0b1220" stroke-width="4">
+      <circle cx="0" cy="30" r="9" stroke="#22d3ee"/>
+      <circle cx="190" cy="30" r="9" stroke="#34d399"/>
+      <circle cx="382" cy="30" r="9" stroke="#fbbf24"/>
+      <circle cx="0" cy="110" r="8" stroke="#38bdf8"/>
+      <circle cx="190" cy="110" r="8" stroke="#818cf8"/>
+      <circle cx="382" cy="110" r="8" stroke="#a78bfa"/>
+    </g>
+
+    <path d="M406 30 l20 -10 v20 z" fill="#fbbf24" stroke="none"/>
+    <path d="M406 110 l20 -10 v20 z" fill="#a78bfa" stroke="none"/>
+  </g>
+
+  <g transform="translate(502 60)">
+    <text x="0" y="37" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="46" font-weight="750">Laminar Inference</text>
+    <text x="2" y="72" fill="#94a3b8" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18">Batching, routing, tracing, and LLM runtime experiments</text>
+
+    <g transform="translate(2 104)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="650">
+      <rect x="0" y="0" width="96" height="30" rx="6" fill="#111827" stroke="#334155"/>
+      <text x="16" y="20" fill="#cbd5e1">Go gateway</text>
+
+      <rect x="108" y="0" width="96" height="30" rx="6" fill="#111827" stroke="#334155"/>
+      <text x="123" y="20" fill="#cbd5e1">C++ worker</text>
+
+      <rect x="216" y="0" width="92" height="30" rx="6" fill="#111827" stroke="#334155"/>
+      <text x="232" y="20" fill="#cbd5e1">ONNX</text>
+      <circle cx="284" cy="15" r="4" fill="#22d3ee"/>
+
+      <rect x="320" y="0" width="104" height="30" rx="6" fill="#111827" stroke="#334155"/>
+      <text x="336" y="20" fill="#cbd5e1">llama.cpp</text>
+    </g>
+  </g>
+</svg>

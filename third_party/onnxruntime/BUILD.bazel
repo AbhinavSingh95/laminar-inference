@@ -1,0 +1,11 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "c_api_headers",
+    hdrs = [
+        "include/onnxruntime_c_api.h",
+        "include/onnxruntime_ep_c_api.h",
+    ],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)

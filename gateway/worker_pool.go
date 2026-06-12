@@ -82,6 +82,21 @@ type WorkerPool struct {
 	endpoints []*workerEndpoint
 }
 
+type grpcWorkerClient struct {
+	client pb.InferenceServiceClient
+}
+
+var _ WorkerClient = grpcWorkerClient{}
+var _ StreamingWorkerClient = grpcWorkerClient{}
+
+func (c grpcWorkerClient) ProcessBatch(ctx context.Context, req *pb.BatchRequest, opts ...grpc.CallOption) (*pb.BatchResponse, error) {
+	return c.client.ProcessBatch(ctx, req, opts...)
+}
+
+func (c grpcWorkerClient) Stream(ctx context.Context, req *pb.RequestItem, opts ...grpc.CallOption) (InferenceStreamClient, error) {
+	return c.client.Stream(ctx, req, opts...)
+}
+
 type workerEndpoint struct {
 	mu sync.Mutex
 
@@ -172,7 +187,7 @@ func NewGRPCWorkerPool(ctx context.Context, addresses []string, cfg Config) (*Wo
 		endpointConfigs = append(endpointConfigs, WorkerEndpointConfig{
 			ID:      fmt.Sprintf("worker-%d", i+1),
 			Address: address,
-			Client:  pb.NewInferenceServiceClient(conn),
+			Client:  grpcWorkerClient{client: pb.NewInferenceServiceClient(conn)},
 			Closer:  conn,
 		})
 	}
@@ -200,6 +215,58 @@ func (p *WorkerPool) ProcessBatch(ctx context.Context, req *pb.BatchRequest, opt
 	latency := time.Since(start)
 	endpoint.finish(latency, err, p.config, time.Now())
 	return resp, err
+}
+
+func (p *WorkerPool) Stream(ctx context.Context, req *pb.RequestItem, opts ...grpc.CallOption) (InferenceStreamClient, error) {
+	endpoint, err := p.selectEndpoint(time.Now())
+	if err != nil {
+		return nil, err
+	}
+	streamingClient, ok := endpoint.client.(StreamingWorkerClient)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "worker does not support streaming")
+	}
+
+	endpoint.begin(time.Now())
+	start := time.Now()
+	stream, err := streamingClient.Stream(ctx, req, opts...)
+	if err != nil {
+		endpoint.finish(time.Since(start), err, p.config, time.Now())
+		return nil, err
+	}
+	return &pooledInferenceStream{
+		InferenceStreamClient: stream,
+		endpoint:              endpoint,
+		start:                 start,
+		config:                p.config,
+	}, nil
+}
+
+type pooledInferenceStream struct {
+	InferenceStreamClient
+	endpoint *workerEndpoint
+	start    time.Time
+	config   Config
+
+	once sync.Once
+}
+
+func (s *pooledInferenceStream) Recv() (*pb.StreamResponse, error) {
+	resp, err := s.InferenceStreamClient.Recv()
+	if err != nil {
+		finishErr := err
+		if errors.Is(err, io.EOF) {
+			finishErr = nil
+		}
+		s.finish(finishErr)
+	}
+	return resp, err
+}
+
+func (s *pooledInferenceStream) finish(err error) {
+	s.once.Do(func() {
+		s.endpoint.finish(time.Since(s.start), err, s.config, time.Now())
+	})
 }
 
 func (p *WorkerPool) WorkerSnapshots() []WorkerSnapshot {

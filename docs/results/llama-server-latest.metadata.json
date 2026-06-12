@@ -1,0 +1,8 @@
+{
+  "timestamp_utc": "2026-06-12T12:50:49Z",
+  "model": "bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+  "llama_server_url": "http://127.0.0.1:18081/completion",
+  "requests": "20",
+  "concurrency": "4",
+  "uname": "Darwin Mac.lan guest wan 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:51:28 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T6041 arm64"
+}

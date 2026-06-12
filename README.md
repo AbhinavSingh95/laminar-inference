@@ -1,19 +1,32 @@
+<p align="center">
+  <img src="docs/assets/laminar-inference-logo.svg" alt="Laminar Inference logo" width="760">
+</p>
+
+<p align="center">
+  <a href="https://bazel.build/"><img alt="Build: Bazel" src="https://img.shields.io/badge/build-Bazel-43a047?style=flat-square"></a>
+  <a href="https://go.dev/"><img alt="Gateway: Go" src="https://img.shields.io/badge/gateway-Go-00ADD8?style=flat-square"></a>
+  <a href="https://isocpp.org/"><img alt="Worker: C++17" src="https://img.shields.io/badge/worker-C%2B%2B17-00599C?style=flat-square"></a>
+  <a href="https://grpc.io/"><img alt="Protocol: gRPC" src="https://img.shields.io/badge/protocol-gRPC-244c5a?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-111827?style=flat-square"></a>
+</p>
+
 # Laminar Inference
 
-Dynamic and adaptive batching gateway for inference workloads, implemented as a small Bazel monorepo with a Go HTTP gateway, load-aware worker pool, C++ gRPC worker simulator, protobuf service contract, Prometheus metrics, deterministic scheduler tests, and a reproducible local benchmark matrix.
+Laminar Inference is a small inference-serving systems lab. It implements a Go HTTP gateway, a C++ gRPC worker, dynamic/adaptive batching, multi-worker routing, backpressure, token-budget admission control, tracing, metrics, streaming responses, and several model/runtime backends including ONNX Runtime and llama.cpp.
 
-This project is intentionally scoped as an inference-systems lab. The C++ worker is a deterministic latency simulator, not a model runtime. The goal is to make batching, queueing, cancellation, worker failure, and observability behavior easy to inspect and test.
+The goal is not to be a drop-in production server. The goal is to make the hard parts of inference serving visible, testable, and benchmarkable.
 
-## Why This Exists
+## What This Shows
 
-Modern inference services often trade a small amount of queueing delay for much higher accelerator utilization. Laminar demonstrates that control plane:
-
-- accept individual HTTP requests
-- group them into bounded batches by size or time
-- route each gRPC batch to a healthy worker
-- fan out worker responses to the original callers
-- expose latency, batch-size, worker, error, and queue metrics
-- handle cancellation, overload, and worker failures explicitly
+- Request batching with fixed and adaptive policies
+- Least-loaded multi-worker routing with per-worker circuit breakers
+- Bounded queue backpressure and token-budget admission control
+- C++ worker backends for simulator, tiny model, tiny LLM, continuous tiny LLM, ONNX Runtime, llama.cpp CLI, and warmed llama.cpp server
+- Continuous batching and KV-cache block simulation for LLM-style serving internals
+- Client-facing streaming through `POST /predict/stream`
+- Request tracing with W3C `Traceparent`, local trace inspection, and OTLP/JSON export
+- Prometheus metrics for requests, batches, workers, queues, admission, cancellations, and failures
+- Reproducible local benchmark matrix with runtime config, trace samples, and model metadata
 
 ## Architecture
 
@@ -21,151 +34,235 @@ Modern inference services often trade a small amount of queueing delay for much 
 HTTP clients
     |
     v
-+-------------------+       gRPC        +----------------------+
-| Go gateway         | ---------------> | C++ worker simulator  |
-| - bounded queue    |                  +----------------------+
-| - dynamic batcher  |       gRPC        +----------------------+
-| - worker pool      | ---------------> | C++ worker simulator  |
-| - Prometheus       |                  +----------------------+
-+-------------------+
-    |
-    v
-Prometheus metrics
++-------------------------+
+| Go gateway              |
+| - HTTP API              |
+| - fixed/adaptive batch  |
+| - token admission       |
+| - worker pool routing   |
+| - metrics and traces    |
++-----------+-------------+
+            |
+            | gRPC ProcessBatch / Stream
+            v
++-------------------------+        optional HTTP/CLI/runtime calls
+| C++ worker              | -----> ONNX Runtime
+| - backend interface     | -----> llama-cli / GGUF
+| - simulator             | -----> llama-server /completion
+| - tiny model / tiny LLM |
+| - continuous scheduler  |
++-------------------------+
 ```
 
-Core paths:
+Core implementation paths:
 
-- [gateway/main.go](gateway/main.go) contains the HTTP server, batch scheduler, backpressure, readiness, and worker client boundary.
-- [gateway/worker_pool.go](gateway/worker_pool.go) routes batches across workers and isolates per-worker failures.
-- [backend/main.cc](backend/main.cc) implements the C++ gRPC worker and deterministic batch latency model.
-- [proto/inference.proto](proto/inference.proto) defines the cross-language contract.
-- [gateway/main_test.go](gateway/main_test.go) and [gateway/worker_pool_test.go](gateway/worker_pool_test.go) test scheduler and routing behavior without live processes.
+- [gateway/main.go](gateway/main.go): HTTP server, batching, backpressure, admission, readiness, and metrics
+- [gateway/worker_pool.go](gateway/worker_pool.go): least-loaded worker routing and per-worker circuit state
+- [gateway/tracing.go](gateway/tracing.go): W3C trace context, in-memory spans, and OTLP/JSON shape
+- [gateway/otlp_exporter.go](gateway/otlp_exporter.go): optional background OTLP/HTTP export
+- [backend/main.cc](backend/main.cc): C++ gRPC worker service
+- [backend/inference_backend.cc](backend/inference_backend.cc): worker backend implementations
+- [backend/scheduling/continuous_batcher.h](backend/scheduling/continuous_batcher.h): continuous batching and KV-cache simulation API
+- [proto/inference.proto](proto/inference.proto): cross-language gRPC contract
 
-## What It Demonstrates
+## Backends
 
-- Dynamic batching by max batch size and max wait time
-- Adaptive batching that reacts to queue pressure, worker latency, and failures
-- Least-loaded multi-worker routing with per-worker circuit breakers
-- Polyglot build orchestration with Bazel, Go, C++, gRPC, and protobuf
-- Bounded queue backpressure instead of unbounded request accumulation
-- Cancellation isolation so one cancelled caller cannot poison a whole batch
-- Circuit breaker behavior for repeated worker failures
-- Request correlation through `trace_id` propagation
-- Prometheus metrics for request latency, worker latency, per-worker load, batch size, queue depth, rejected requests, and cancellations
-- Reproducible unit tests for concurrency-sensitive scheduler behavior
+| Backend | Purpose |
+| --- | --- |
+| `simulator` | Deterministic latency model for fast scheduler and gateway tests |
+| `tiny_model` | Hermetic fixed-weight text classifier-style inference path |
+| `tiny_llm` | Hermetic decoder-only LLM path with tokenization, prefill, decode, and generation metadata |
+| `continuous_tiny_llm` | Tiny LLM plus token-step scheduling, decode utilization, prefix cache, and KV-cache block metrics |
+| `onnx` | Optional ONNX Runtime backend using the checked-in `models/logreg_iris.onnx` smoke model |
+| `llama_cpp` | Optional local GGUF command adapter through `llama-cli` |
+| `llama_server` | Optional warmed model path through llama.cpp server's native `/completion` endpoint |
+
+The tiny backends are intentionally small and hermetic. They make serving mechanics testable without requiring external model downloads. The llama.cpp server path is the real local LLM benchmark path.
 
 ## Quick Start
 
 Prerequisites:
 
-- Bazel 8.5 or newer
-- macOS or Linux with a C++17 toolchain
+- Bazel 8.5+
+- Go toolchain managed through Bazel
+- C++17 toolchain
+- macOS or Linux
 
-Build everything:
+Build and test:
 
 ```bash
 bazel build //...
+bazel test //...
 ```
 
-Run the worker and gateway:
+Run the default simulator worker and gateway:
 
 ```bash
 ./run.sh
 ```
 
-Run the gateway with two local worker simulators:
+Send a request:
 
 ```bash
-LAMINAR_WORKER_COUNT=2 ./run.sh
-```
-
-In another terminal:
-
-```bash
-curl -X POST http://localhost:8080/predict \
+curl -sS -X POST http://localhost:8080/predict \
   -H "Content-Type: application/json" \
-  -H "X-Trace-ID: demo-001" \
-  -d '{"prompt":"Explain dynamic batching"}'
+  -d '{"prompt":"Explain dynamic batching"}' | jq .
 ```
 
-Useful endpoints:
-
-- `POST /predict` submits an inference request
-- `GET /health` checks gateway liveness
-- `GET /ready` reports circuit-breaker readiness
-- `GET /stats` shows runtime config, batch policy state, and per-worker state
-- `GET /metrics` exposes Prometheus metrics
-
-## Tests
-
-Run all Bazel tests:
-
-```bash
-bazel test //...
-```
-
-The gateway tests cover:
-
-- flush when `MaxBatchSize` is reached
-- flush when `MaxBatchWaitTime` expires
-- request cancellation before and during worker RPCs
-- bounded queue overload behavior
-- circuit breaker rejection after repeated worker failures
-- least-loaded worker routing under concurrent batches
-- per-worker failure isolation
-
-The shell smoke test exercises the live HTTP/gRPC path:
+Run the live smoke test against a running gateway:
 
 ```bash
 ./test.sh
 ```
 
-## Configuration
+## Common Runs
 
-The gateway is configured through environment variables:
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `LAMINAR_HTTP_ADDR` | `:8080` | Gateway listen address |
-| `LAMINAR_WORKER_ADDR` | `localhost:50051` | Worker gRPC address |
-| `LAMINAR_WORKER_ADDRS` | unset | Comma-separated worker gRPC addresses. Overrides `LAMINAR_WORKER_ADDR` when set |
-| `LAMINAR_BATCH_POLICY` | `fixed` | `fixed` or `adaptive` |
-| `LAMINAR_MAX_BATCH_SIZE` | `32` | Max requests per batch |
-| `LAMINAR_MAX_BATCH_WAIT` | `10ms` | Max time to wait before flushing a partial batch |
-| `LAMINAR_ADAPTIVE_MIN_WAIT` | `1ms` | Shortest wait used by adaptive batching |
-| `LAMINAR_ADAPTIVE_MAX_WAIT` | `10ms` | Longest wait used by adaptive batching |
-| `LAMINAR_ADAPTIVE_TARGET_LATENCY` | `150ms` | Worker-latency target for adaptive wait adjustments |
-| `LAMINAR_ADAPTIVE_QUEUE_HIGH_WATERMARK` | `32` | Queue depth where adaptive batching becomes latency-biased |
-| `LAMINAR_QUEUE_SIZE` | `1000` | Bounded gateway queue capacity |
-| `LAMINAR_WORKER_REQUEST_TIMEOUT` | `30s` | Deadline for one worker batch RPC |
-| `LAMINAR_CIRCUIT_THRESHOLD` | `5` | Consecutive worker failures before opening the circuit |
-| `LAMINAR_CIRCUIT_RESET_AFTER` | `30s` | Cooldown before probing the worker again |
-
-`./run.sh` also supports `LAMINAR_WORKER_COUNT` for starting multiple local worker simulators on adjacent ports.
-
-Example:
+Run with adaptive batching:
 
 ```bash
-LAMINAR_BATCH_POLICY=adaptive LAMINAR_MAX_BATCH_SIZE=32 LAMINAR_MAX_BATCH_WAIT=10ms ./run.sh
+LAMINAR_BATCH_POLICY=adaptive ./run.sh
 ```
+
+Run two local workers behind the gateway:
+
+```bash
+LAMINAR_WORKER_COUNT=2 LAMINAR_BATCH_POLICY=adaptive ./run.sh
+```
+
+Run the continuous tiny-LLM scheduler backend:
+
+```bash
+LAMINAR_WORKER_BACKEND=continuous_tiny_llm \
+LAMINAR_BATCH_POLICY=adaptive \
+./run.sh
+```
+
+Run with token-budget admission control:
+
+```bash
+LAMINAR_ADMISSION_ENABLED=true \
+LAMINAR_ADMISSION_MAX_IN_FLIGHT_TOKENS=256 \
+LAMINAR_ADMISSION_ESTIMATED_OUTPUT_TOKENS=32 \
+LAMINAR_BATCH_POLICY=adaptive \
+./run.sh
+```
+
+Run ONNX Runtime:
+
+```bash
+./scripts/setup_onnxruntime.sh
+LAMINAR_WORKER_BACKEND=onnx ./run.sh
+```
+
+Run against a warmed llama.cpp server:
+
+```bash
+LAMINAR_WORKER_BACKEND=llama_server \
+LAMINAR_LLAMA_SERVER_URL=http://127.0.0.1:18081/completion \
+LAMINAR_LLAMA_SERVER_MAX_TOKENS=64 \
+./run.sh
+```
+
+## Real Local LLM Benchmark
+
+The easiest real-model path uses llama.cpp server and a small Qwen2.5 0.5B GGUF model:
+
+```bash
+./scripts/benchmark_real_llm.sh --install --requests 20 --concurrency 4
+```
+
+This script:
+
+- installs/checks llama.cpp tools
+- starts a warmed `llama-server` when needed
+- runs only the `llama.cpp server` benchmark scenarios
+- writes a Markdown report to `docs/results/llama-server-latest.md`
+- writes runtime metadata to `docs/results/llama-server-latest.metadata.json`
+- keeps model binaries out of the repository
+
+More detail: [docs/LLM_BENCHMARKING.md](docs/LLM_BENCHMARKING.md).
 
 ## Benchmarking
 
-Generate a local benchmark matrix comparing no batching, fixed dynamic batching, adaptive batching, and adaptive batching with two workers:
+Run the full local benchmark matrix:
 
 ```bash
 ./benchmark.sh
 ```
 
-The script writes [docs/results/latest.md](docs/results/latest.md). Treat benchmark numbers as machine-local unless captured with the methodology in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). A credible comparison should report at least throughput, p50/p95/p99 latency, average batch size, rejection rate, and the exact gateway configuration used.
+Run a focused continuous-scheduler benchmark:
+
+```bash
+./benchmark.sh --scenario "continuous tiny llm" --requests 60 --concurrency 20
+```
+
+Run the overload/admission-control scenario:
+
+```bash
+./benchmark.sh --scenario "admission control overload" --requests 60 --concurrency 20
+```
+
+Benchmark reports include throughput, p50/p95/p99 latency, average batch size, rejection count, runtime policy snapshots, admission snapshots, worker snapshots, and trace samples.
+
+Reference docs:
+
+- [docs/BENCHMARKS.md](docs/BENCHMARKS.md): methodology and scenario guide
+- [docs/results/latest.md](docs/results/latest.md): latest benchmark matrix output
+- [docs/results/llama-server-latest.md](docs/results/llama-server-latest.md): latest real llama.cpp server result
+
+Benchmark numbers are local-machine evidence, not universal performance claims.
+
+## Observability
+
+Useful endpoints:
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /health` | Gateway liveness |
+| `GET /ready` | Readiness based on worker circuit state |
+| `GET /stats` | Runtime config, batch policy, admission state, and worker snapshots |
+| `GET /metrics` | Prometheus metrics |
+| `GET /traces?trace_id=...` | Local request span snapshot |
+| `GET /traces/otlp?trace_id=...` | OTLP/JSON-shaped span export |
+| `POST /predict` | Non-streaming inference request |
+| `POST /predict/stream` | Server-sent event stream with `token` and `done` events |
+
+Run a local fake OTLP collector:
+
+```bash
+python3 scripts/fake_otlp_collector.py --port 4318
+LAMINAR_OTLP_ENDPOINT=http://localhost:4318/v1/traces ./run.sh
+```
+
+## Repository Layout
+
+```text
+backend/                 C++ worker and inference backends
+backend/scheduling/      Continuous batching and KV-cache simulation
+gateway/                 Go HTTP gateway, batching, routing, tracing, admission
+proto/                   gRPC/protobuf contract
+models/                  Small checked-in ONNX smoke model
+scripts/                 Benchmark and runtime setup helpers
+third_party/onnxruntime/ Optional ONNX Runtime headers/build glue
+docs/                    Architecture, benchmarking, LLM setup, roadmap, results
+docs/assets/             README artwork and project assets
+```
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): detailed system architecture
+- [docs/BENCHMARKS.md](docs/BENCHMARKS.md): benchmark methodology
+- [docs/LLM_BENCHMARKING.md](docs/LLM_BENCHMARKING.md): real local LLM setup
+- [docs/ROADMAP.md](docs/ROADMAP.md): completed milestones and next systems work
 
 ## Current Limits
 
-This is not yet a production inference server. The worker simulates accelerator behavior with `base_latency + per_request_latency * batch_size`; it does not execute a model. The next meaningful upgrades are:
+Laminar is a focused systems project, not a hardened production inference platform. The most important remaining upgrades are:
 
-- add a real model backend path such as ONNX Runtime or llama.cpp
-- add OpenTelemetry spans across HTTP and gRPC
-- add queue persistence or admission-control policies for more realistic overload experiments
+- fault-injection scenarios for slow workers, timeouts, cancellation storms, and KV-cache exhaustion
+- priority/deadline-aware scheduling
+- a documented two-llama-server multi-worker benchmark recipe
+- optional OpenTelemetry Collector configuration for external trace ingestion
 
 ## License
 

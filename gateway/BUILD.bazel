@@ -3,8 +3,11 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "gateway_lib",
     srcs = [
+        "admission.go",
         "main.go",
+        "otlp_exporter.go",
         "policy.go",
+        "tracing.go",
         "worker_pool.go",
     ],
     importpath = "github.com/AbhinavSingh95/laminar-inference/gateway",
@@ -31,7 +34,9 @@ go_test(
     name = "gateway_test",
     srcs = [
         "main_test.go",
+        "otlp_exporter_test.go",
         "policy_test.go",
+        "tracing_test.go",
         "worker_pool_test.go",
     ],
     embed = [":gateway_lib"],

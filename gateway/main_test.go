@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -15,9 +16,10 @@ import (
 )
 
 type mockWorker struct {
-	mu      sync.Mutex
-	calls   []*pb.BatchRequest
-	onBatch func(context.Context, *pb.BatchRequest) (*pb.BatchResponse, error)
+	mu       sync.Mutex
+	calls    []*pb.BatchRequest
+	onBatch  func(context.Context, *pb.BatchRequest) (*pb.BatchResponse, error)
+	onStream func(context.Context, *pb.RequestItem) (InferenceStreamClient, error)
 }
 
 func (m *mockWorker) ProcessBatch(ctx context.Context, req *pb.BatchRequest, _ ...grpc.CallOption) (*pb.BatchResponse, error) {
@@ -30,6 +32,40 @@ func (m *mockWorker) ProcessBatch(ctx context.Context, req *pb.BatchRequest, _ .
 		return onBatch(ctx, req)
 	}
 	return responseFor(req), nil
+}
+
+func (m *mockWorker) Stream(ctx context.Context, req *pb.RequestItem, _ ...grpc.CallOption) (InferenceStreamClient, error) {
+	m.mu.Lock()
+	onStream := m.onStream
+	m.mu.Unlock()
+
+	if onStream != nil {
+		return onStream(ctx, req)
+	}
+	return &fakeInferenceStream{
+		events: []*pb.StreamResponse{
+			{
+				Id:        req.Id,
+				TraceId:   req.TraceId,
+				EventType: "done",
+				Result:    fmt.Sprintf("ok:%s", req.Prompt),
+			},
+		},
+	}, nil
+}
+
+type fakeInferenceStream struct {
+	events []*pb.StreamResponse
+	index  int
+}
+
+func (s *fakeInferenceStream) Recv() (*pb.StreamResponse, error) {
+	if s.index >= len(s.events) {
+		return nil, io.EOF
+	}
+	event := s.events[s.index]
+	s.index++
+	return event, nil
 }
 
 func (m *mockWorker) callCount() int {
@@ -218,6 +254,100 @@ func TestQueueFullReturnsBackpressureError(t *testing.T) {
 	close(releaseRPC)
 	_ = receiveResponse(t, first)
 	_ = receiveResponse(t, second)
+}
+
+func TestAdmissionControlRejectsWhenTokenBudgetIsFull(t *testing.T) {
+	releaseRPC := make(chan struct{})
+	worker := &mockWorker{
+		onBatch: func(ctx context.Context, req *pb.BatchRequest) (*pb.BatchResponse, error) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-releaseRPC:
+				return responseFor(req), nil
+			}
+		},
+	}
+
+	cfg := testConfig()
+	cfg.MaxBatchSize = 1
+	cfg.WorkerRequestTimeout = 5 * time.Second
+	cfg.AdmissionEnabled = true
+	cfg.AdmissionMaxInFlightTokens = 8
+	cfg.AdmissionEstimatedTokensPerByte = 1
+	cfg.AdmissionEstimatedOutputTokens = 2
+	batcher := NewBatcher(worker, cfg)
+
+	first := make(chan *Response, 1)
+	go func() {
+		first <- batcher.Submit(context.Background(), "123456", "trace-first")
+	}()
+
+	waitFor(t, func() bool {
+		return batcher.Snapshot().Admission.InFlightTokens == 8
+	})
+
+	resp := batcher.Submit(context.Background(), "x", "trace-rejected")
+	if resp.ErrorCode != ErrAdmissionRejected {
+		t.Fatalf("expected admission rejection, got %+v", resp)
+	}
+	if got := batcher.Snapshot().Admission.RejectedRequests; got != 1 {
+		t.Fatalf("expected one admission rejection, got %d", got)
+	}
+
+	close(releaseRPC)
+	firstResp := receiveResponse(t, first)
+	if firstResp.Error != "" {
+		t.Fatalf("first request should succeed after releasing RPC: %+v", firstResp)
+	}
+}
+
+func TestAdmissionControlReleasesBudgetAfterWorkerResponse(t *testing.T) {
+	worker := &mockWorker{}
+	cfg := testConfig()
+	cfg.MaxBatchSize = 1
+	cfg.AdmissionEnabled = true
+	cfg.AdmissionMaxInFlightTokens = 8
+	cfg.AdmissionEstimatedTokensPerByte = 1
+	cfg.AdmissionEstimatedOutputTokens = 2
+	batcher := NewBatcher(worker, cfg)
+
+	first := batcher.Submit(context.Background(), "123456", "trace-first")
+	if first.Error != "" {
+		t.Fatalf("unexpected first response error: %+v", first)
+	}
+
+	snapshot := batcher.Snapshot().Admission
+	if snapshot.InFlightTokens != 0 {
+		t.Fatalf("expected admission tokens released, got %d", snapshot.InFlightTokens)
+	}
+
+	second := batcher.Submit(context.Background(), "123456", "trace-second")
+	if second.Error != "" {
+		t.Fatalf("second request should fit after release: %+v", second)
+	}
+}
+
+func TestAdmissionConfigLoadsFromEnv(t *testing.T) {
+	t.Setenv("LAMINAR_ADMISSION_ENABLED", "true")
+	t.Setenv("LAMINAR_ADMISSION_MAX_IN_FLIGHT_TOKENS", "123")
+	t.Setenv("LAMINAR_ADMISSION_ESTIMATED_TOKENS_PER_BYTE", "0.25")
+	t.Setenv("LAMINAR_ADMISSION_ESTIMATED_OUTPUT_TOKENS", "17")
+
+	cfg := LoadConfigFromEnv()
+
+	if !cfg.AdmissionEnabled {
+		t.Fatal("expected admission control to load as enabled")
+	}
+	if cfg.AdmissionMaxInFlightTokens != 123 {
+		t.Fatalf("expected max in-flight tokens 123, got %d", cfg.AdmissionMaxInFlightTokens)
+	}
+	if cfg.AdmissionEstimatedTokensPerByte != 0.25 {
+		t.Fatalf("expected token estimate 0.25, got %f", cfg.AdmissionEstimatedTokensPerByte)
+	}
+	if cfg.AdmissionEstimatedOutputTokens != 17 {
+		t.Fatalf("expected output token estimate 17, got %d", cfg.AdmissionEstimatedOutputTokens)
+	}
 }
 
 func TestCircuitBreakerRejectsAfterConsecutiveFailures(t *testing.T) {
