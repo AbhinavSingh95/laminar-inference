@@ -28,5 +28,7 @@ test --test_summary=detailed
 # Color output for better readability
 common --color=yes
 
-# Cache settings for faster rebuilds
-build --disk_cache=~/.cache/bazel
+# Keep the disk cache outside Bazel's default Linux output user root
+# (`~/.cache/bazel`) so GitHub Actions runners do not nest output_base inside
+# disk_cache.
+build --disk_cache=~/.cache/laminar-inference-bazel-disk-cache
